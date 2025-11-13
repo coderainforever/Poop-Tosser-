@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Great Poop Toss</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+        body {
+            font-family: 'Fredoka One', cursive;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+            overflow: hidden;
+            background-color: #8B4513; /* Fallback */
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)),
+                url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%235d2e0c' fill-opacity='0.1' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E"),
+                linear-gradient(to bottom, #87CEEB 0%, #e0f7fa 100%);
+            background-size: auto, auto, cover;
+        }
+
+        #game-container {
+            cursor: crosshair;
+            perspective: 1000px;
+        }
+
+        .target-box {
+            position: absolute;
+            transition: transform 0.1s linear;
+            user-select: none;
+            will-change: top, left, transform;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            border: 4px solid white;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden; /* Keeps splats inside */
+        }
+
+        .target-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+        }
+
+        .projectile {
+            position: absolute;
+            font-size: 40px;
+            pointer-events: none;
+            z-index: 50;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .splat {
+            position: absolute;
+            font-size: 32px;
+            pointer-events: none;
+            transform: translate(-50%, -50%) scale(1);
+            animation: splat-anim 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 10;
+            filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.2));
+        }
+
+        @keyframes splat-anim {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        .ui-panel {
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.9);
+            border: 4px solid #5D2E0C;
+            box-shadow: 8px 8px 0px #3E1E08;
+        }
+
+        /* Animations for UI */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col overflow-hidden">
+
+    <!-- Header / Scoreboard -->
+    <div class="absolute top-0 left-0 w-full p-4 z-50 flex justify-between items-start pointer-events-none">
+        <div class="ui-panel rounded-xl p-3 pointer-events-auto transform hover:scale-105 transition-transform">
+            <h1 class="text-2xl md:text-3xl text-amber-800 leading-none drop-shadow-sm">💩 Poop Tosser</h1>
+        </div>
+        
+        <div class="flex gap-4 pointer-events-auto">
+            <div class="ui-panel rounded-xl p-3 min-w-[100px] text-center">
+                <div class="text-xs uppercase tracking-bold text-gray-500">Score</div>
+                <div id="score-display" class="text-3xl text-amber-700">0</div>
+            </div>
+            <button id="reset-btn" onclick="resetGame()" class="ui-panel bg-amber-400 hover:bg-amber-300 rounded-xl p-3 flex items-center justify-center active:translate-y-1 active:shadow-none transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-amber-900"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" /><path d="M3 3v9h9" /></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Setup Modal -->
+    <div id="setup-screen" class="absolute inset-0 z-[60] bg-black/60 flex items-center justify-center backdrop-blur-sm p-4">
+        <div class="ui-panel w-full max-w-md rounded-2xl p-8 text-center flex flex-col items-center gap-6">
+            <div class="text-6xl float-anim">💩</div>
+            <h2 class="text-3xl text-amber-900">Ready, Aim, Squish!</h2>
+            <p class="text-gray-600">Upload a photo to start the target practice.</p>
+            
+            <div class="relative group w-full">
+                <div class="absolute -inset-1 bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-200"></div>
+                <label class="relative block w-full bg-white border-2 border-dashed border-amber-300 rounded-xl p-8 cursor-pointer hover:bg-amber-50 transition-colors">
+                    <div class="flex flex-col items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <span class="text-amber-700 font-bold">Tap to Upload Photo</span>
+                    </div>
+                    <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageUpload(this)">
+                </label>
+            </div>
+            
+            <button onclick="useDefaultImage()" class="text-sm text-gray-500 hover:text-amber-600 underline">
+                Or use a generic face
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="game-container" class="relative flex-grow w-full h-full overflow-hidden">
+        <div id="target" class="target-box hidden w-48 h-48 md:w-64 md:h-64 bg-gray-200">
+            <img id="target-img-element" src="" alt="Target" class="target-img">
+            <div id="splat-container" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+        </div>
+    </div>
+
+    <!-- Mobile Controls Hint -->
+    <div class="absolute bottom-4 w-full text-center pointer-events-none z-40 opacity-50 text-amber-900 text-sm font-bold uppercase tracking-widest">
+        Tap anywhere to throw
+    </div>
+
+    <script>
+        // --- Game State ---
+        const state = {
+            score: 0,
+            isPlaying: false,
+            targetX: 0,
+            targetY: 0,
+            targetDX: 2,
+            targetDY: 2,
+            baseSpeed: 2,
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+
+        // --- Elements ---
+        const container = document.getElementById('game-container');
+        const target = document.getElementById('target');
+        const targetImg = document.getElementById('target-img-element');
+        const setupScreen = document.getElementById('setup-screen');
+        const scoreDisplay = document.getElementById('score-display');
+        const splatContainer = document.getElementById('splat-container');
+
+        // --- Audio System (Synthesized) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playThrowSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+            
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        function playSplatSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+            
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- Setup Functions ---
+        function handleImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    startGame(e.target.result);
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function useDefaultImage() {
+            // A simple generated SVG face
+            const svgFace = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23FFD700' stroke='%23DAA520' stroke-width='3'/%3E%3Ccircle cx='35' cy='35' r='5' fill='%23333'/%3E%3Ccircle cx='65' cy='35' r='5' fill='%23333'/%3E%3Cpath d='M 30 65 Q 50 85 70 65' stroke='%23333' stroke-width='3' fill='none'/%3E%3C/svg%3E";
+            startGame(svgFace);
+        }
+
+        function startGame(imgSrc) {
+            targetImg.src = imgSrc;
+            setupScreen.style.display = 'none';
+            target.classList.remove('hidden');
+            state.isPlaying = true;
+            state.score = 0;
+            updateScore(0);
+            
+            // Center target initially
+            state.targetX = (state.width / 2) - (target.offsetWidth / 2);
+            state.targetY = (state.height / 2) - (target.offsetHeight / 2);
+            
+            // Randomize direction
+            state.targetDX = (Math.random() > 0.5 ? 1 : -1) * state.baseSpeed;
+            state.targetDY = (Math.random() > 0.5 ? 1 : -1) * state.baseSpeed;
+
+            gameLoop();
+        }
+
+        function resetGame() {
+            state.isPlaying = false;
+            setupScreen.style.display = 'flex';
+            target.classList.add('hidden');
+            splatContainer.innerHTML = ''; // Clear poop
+        }
+
+        function updateScore(val) {
+            state.score += val;
+            scoreDisplay.textContent = state.score;
+            
+            // Increase difficulty every 5 points
+            const speedMultiplier = 1 + (Math.floor(state.score / 5) * 0.2);
+            const dirX = state.targetDX > 0 ? 1 : -1;
+            const dirY = state.targetDY > 0 ? 1 : -1;
+            
+            state.targetDX = dirX * (state.baseSpeed * speedMultiplier);
+            state.targetDY = dirY * (state.baseSpeed * speedMultiplier);
+        }
+
+        // --- Game Logic ---
+        function gameLoop() {
+            if (!state.isPlaying) return;
+
+            // Move Target
+            const rect = target.getBoundingClientRect();
+            const parentRect = container.getBoundingClientRect();
+
+            let nextX = state.targetX + state.targetDX;
+            let nextY = state.targetY + state.targetDY;
+
+            // Bounce Logic
+            if (nextX <= 0 || nextX + rect.width >= parentRect.width) {
+                state.targetDX *= -1;
+                nextX = Math.max(0, Math.min(nextX, parentRect.width - rect.width));
+            }
+            if (nextY <= 0 || nextY + rect.height >= parentRect.height) {
+                state.targetDY *= -1;
+                nextY = Math.max(0, Math.min(nextY, parentRect.height - rect.height));
+            }
+
+            state.targetX = nextX;
+            state.targetY = nextY;
+
+            target.style.transform = `translate(${nextX}px, ${nextY}px)`;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Throwing Logic ---
+        container.addEventListener('pointerdown', (e) => {
+            if (!state.isPlaying) return;
+
+            playThrowSound();
+
+            // Create projectile element
+            const startX = window.innerWidth / 2;
+            const startY = window.innerHeight + 50;
+            const endX = e.clientX;
+            const endY = e.clientY;
+
+            const poop = document.createElement('div');
+            poop.textContent = '💩';
+            poop.className = 'projectile';
+            poop.style.left = startX + 'px';
+            poop.style.top = startY + 'px';
+            poop.style.transform = 'translate(-50%, -50%) scale(2)'; // Start big (close to camera)
+            
+            document.body.appendChild(poop);
+
+            // Force reflow
+            poop.offsetHeight;
+
+            // Animate throw
+            poop.style.left = endX + 'px';
+            poop.style.top = endY + 'px';
+            poop.style.transform = 'translate(-50%, -50%) scale(0.5)'; // End small (far away)
+
+            setTimeout(() => {
+                checkHit(endX, endY);
+                poop.remove();
+            }, 400); // Match transition duration
+        });
+
+        function checkHit(x, y) {
+            const rect = target.getBoundingClientRect();
+            
+            // Check if coordinates are inside the target box
+            if (x >= rect.left && x <= rect.right && 
+                y >= rect.top && y <= rect.bottom) {
+                
+                playSplatSound();
+                
+                // Create Splat relative to the target
+                // This ensures the splat moves WITH the target
+                const splat = document.createElement('div');
+                splat.textContent = '💩';
+                splat.className = 'splat';
+                
+                // Calculate position relative to target's top-left corner
+                const relX = x - rect.left;
+                const relY = y - rect.top;
+                
+                splat.style.left = relX + 'px';
+                splat.style.top = relY + 'px';
+                // Random rotation for variety
+                splat.style.transform = `translate(-50%, -50%) rotate(${Math.random() * 360}deg)`;
+
+                splatContainer.appendChild(splat);
+                updateScore(1);
+                
+                // Visual feedback on target
+                target.style.filter = 'brightness(1.2)';
+                setTimeout(() => target.style.filter = 'none', 100);
+
+            } else {
+                // Miss logic (optional: create a mark on the background?)
+                const miss = document.createElement('div');
+                miss.textContent = '💢';
+                miss.className = 'splat';
+                miss.style.left = x + 'px';
+                miss.style.top = y + 'px';
+                miss.style.position = 'fixed'; // Fixed to screen
+                miss.style.opacity = '0.5';
+                container.appendChild(miss);
+                setTimeout(() => miss.remove(), 1000);
+            }
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            state.width = window.innerWidth;
+            state.height = window.innerHeight;
+            // Keep target in bounds immediately
+            state.targetX = Math.min(state.targetX, state.width - target.offsetWidth);
+            state.targetY = Math.min(state.targetY, state.height - target.offsetHeight);
+        });
+
+    </script>
+</body>
+</html>
+
